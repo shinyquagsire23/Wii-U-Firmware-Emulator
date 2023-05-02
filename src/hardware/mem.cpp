@@ -36,6 +36,8 @@ void MEMController::reset() {
 }
 
 uint16_t MEMController::read(uint32_t addr) {
+	//Logger::warning("MEM memory read: 0x%X", addr);
+
 	switch (addr) {
 		case MEM_COMPAT: return compat;
 		case MEM_FLUSH_MASK: return 0;
@@ -54,6 +56,8 @@ uint16_t MEMController::read(uint32_t addr) {
 }
 
 void MEMController::write(uint32_t addr, uint16_t value) {
+	//Logger::warning("MEM memory write: 0x%X 0x%08X", addr, value);
+
 	if (addr == MEM_COMPAT) compat = value;
 	else if (addr == MEM_COLSEL) {}
 	else if (addr == MEM_ROWSEL) {}

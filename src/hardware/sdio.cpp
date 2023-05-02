@@ -9,6 +9,10 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#define loff_t off_t
+#define fopen64 fopen
+#define ftello64 ftello
+
 SDIOCard::SDIOCard() : csd() {
 	csd.csd_structure = 1; // version 2
 	csd.taac = 0xE; // 1 ms
@@ -63,6 +67,30 @@ Buffer MLCCard::read(uint64_t offset, uint32_t size) {
 	return Buffer(data + offset, size, Buffer::CreateCopy);
 }
 
+SDCard::SDCard() {
+	FILE* f = fopen64("files/sdcard.bin", "rb");
+	if (!f) {
+		runtime_error("Failed to open \"files/sdcard.bin\"");
+	}
+	fseek(f, 0, SEEK_END);
+	loff_t size = ftello64(f);
+	fclose(f);
+
+	//is_32gb = size >= 0x1DB800000;
+
+	csd.csize_lo = 0x3FFF;
+
+	data = memory_mapped_file_open("files/sdcard.bin", 0x3C8C0000);
+}
+
+SDCard::~SDCard() {
+	memory_mapped_file_close(data, 0x3C8C0000);
+}
+
+Buffer SDCard::read(uint64_t offset, uint32_t size) {
+	return Buffer(data + offset, size, Buffer::CreateCopy);
+}
+
 
 Buffer DummyCard::read(uint64_t offset, uint32_t size) {
 	Logger::warning("Unknown sdio controller read");
@@ -79,6 +107,7 @@ SDIOController::SDIOController(PhysicalMemory *physmem, Type type) {
 	this->type = type;
 	
 	if (type == TYPE_MLC) card = new MLCCard();
+	else if (type == TYPE_SD) card = new SDCard();
 	else {
 		card = new DummyCard();
 	}
@@ -99,10 +128,14 @@ void SDIOController::reset() {
 	control = 0;
 	clock_control = 0;
 	timeout_control = 0;
-	int_status = 0;
+	int_status = 0x2000000;
 	int_enable = 0;
 	int_signal = 0;
 	capabilities = 0;
+	sdio_state = 0x10000;
+
+	//read_data = card->read(0, 1 * 0x200);
+	read_fifo_idx = 0;
 	
 	state = STATE_IDLE;
 	app_cmd = false;
@@ -112,24 +145,37 @@ void SDIOController::reset() {
 }
 
 uint32_t SDIOController::read(uint32_t addr) {
+	//Logger::warning("sdio read: 0x%X %x %x", addr, int_status, result0);
+
 	switch (addr) {
 		case SDIO_COMMAND: return (command << 16) | transfer_mode;
 		case SDIO_RESPONSE0: return result0;
 		case SDIO_RESPONSE1: return result1;
 		case SDIO_RESPONSE2: return result2;
 		case SDIO_RESPONSE3: return result3;
-		case SDIO_STATE: return 0;
+		case SDIO_STATE: return sdio_state;
 		case SDIO_CONTROL: return control;
 		case SDIO_CLOCK_CONTROL: return clock_control | (timeout_control << 16);
 		case SDIO_INT_STATUS: return int_status;
 		case SDIO_CAPABILITIES_HI: return capabilities >> 32;
+		case SDIO_READ_FIFO: {
+			uint32_t tmp = 0;
+			read_data.read(&tmp, read_fifo_idx, sizeof(tmp));
+			read_fifo_idx += sizeof(tmp);
+			//Logger::warning("%08x", tmp);
+			return tmp;
+		}
 	}
 	
 	Logger::warning("Unknown sdio read: 0x%X", addr);
 	return 0;
 }
 
+//step 4430000
+
 void SDIOController::write(uint32_t addr, uint32_t value) {
+	//Logger::warning("sdio write: 0x%X (0x%08X)", addr, value);
+
 	if (addr == SDIO_DMA_ADDRESS) dma_addr = value;
 	else if (addr == SDIO_BLOCK_SIZE) {
 		block_size = value & 0xFFF;
@@ -155,6 +201,7 @@ void SDIOController::write(uint32_t addr, uint32_t value) {
 		}
 		
 		int_status |= 3;
+		int_status |= 0x10000;
 	}
 	else if (addr == SDIO_CONTROL) control = value;
 	else if (addr == SDIO_CLOCK_CONTROL) {
@@ -182,6 +229,7 @@ void SDIOController::write(uint32_t addr, uint32_t value) {
 }
 
 void SDIOController::process_app_command(int command) {
+	Logger::warning("sdio app cmd %i %08x", command, argument);
 	if (command == SET_BUS_WIDTH) {
 		bus_width = argument & 3;
 		result0 = (state << 9) | 0x120;
@@ -192,6 +240,11 @@ void SDIOController::process_app_command(int command) {
 		if (argument & result0) {
 			result0 |= 0xC0000000;
 		}
+		if (argument & 0x40000000) {
+			result0 |= 0xC0000000;
+		}
+
+		Logger::warning("sdio op cond %08x", result0);
 	}
 	else {
 		Logger::warning("Unknown sdio app command: %i", command);
@@ -199,11 +252,13 @@ void SDIOController::process_app_command(int command) {
 }
 
 void SDIOController::process_command(int command) {
+	Logger::warning("sdio cmd %i %08x", command, argument);
 	if (command == GO_IDLE_STATE) {
 		state = STATE_IDLE;
+		int_status &= ~0x8000;
 	}
 	else if (command == ALL_SEND_CID) {}
-	else if (command == SEND_RELATIVE_ADDR) result0 = 0x400;
+	else if (command == SEND_RELATIVE_ADDR) result0 = 0x10400;
 	else if (command == IO_SEND_OP_COND) {
 		int_status |= 0x8000;
 	}
@@ -226,9 +281,32 @@ void SDIOController::process_command(int command) {
 	else if (command == SET_BLOCKLEN) {
 		result0 = (state << 9) | 0x100;
 	}
+	else if (command == READ_SINGLE_BLOCK) {
+		//Logger::warning("SDIO read block: %08x, size %08x", argument, block_size);
+		if (argument << 9 < 0x3C8C0000)
+			read_data = card->read((uint64_t)argument << 9, 1 * block_size);
+		if (dma_addr && (transfer_mode & 1)) {
+			uint32_t tmp = 0;
+			//read_data.read(&tmp, 0, sizeof(tmp));
+			Logger::warning("DMA to: %x, %x %x", dma_addr, (uint64_t)argument << 9, block_size);
+			physmem->write(dma_addr, read_data);
+		}
+		else {
+			sdio_state |= 0x800;
+			read_fifo_idx = 0;
+		}
+		
+	}
 	else if (command == READ_MULTIPLE_BLOCK) {
-		Buffer data = card->read((uint64_t)argument << 9, block_count * block_size);
-		physmem->write(dma_addr, data);
+		read_data = card->read((uint64_t)argument << 9, block_count * block_size);
+		if (dma_addr && (transfer_mode & 1)) {
+			physmem->write(dma_addr, read_data);
+		}
+		else {
+			sdio_state |= 0x800;
+			read_fifo_idx = 0;
+		}
+		
 	}
 	else if (command == IO_RW_DIRECT) {
 		int function = (argument >> 28) & 7;

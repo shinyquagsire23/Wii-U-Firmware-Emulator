@@ -12,7 +12,7 @@ void RTCController::reset() {
 	
 	counter = 0;
 	offtimer = 0;
-	control0 = 0;
+	control0 = 0x00020F21;
 	control1 = 0;
 	
 	sramidx = 0;
@@ -28,6 +28,7 @@ uint32_t RTCController::read_value(uint32_t offset) {
 		case 0x21000100: return offtimer;
 		case 0x21000C00: return control0;
 		case 0x21000D00: return control1;
+		case 0x21000400: return 0x03030303;
 	}
 	
 	Logger::warning("Unknown rtc read: 0x%08X", offset);

@@ -86,7 +86,7 @@ void ARMProcessor::checkDebugPoints() {
 		printer.write(text);
 		console.write(text);
 	}
-	else if (core.regs[ARMCore::PC] == 0x812DD20) {
+	else if (core.regs[ARMCore::PC] == 0x812DD20) { // EHHHHHH
 		uint16_t instr;
 		read(core.regs[ARMCore::LR] - 2, &instr);
 		
@@ -212,6 +212,7 @@ bool ARMProcessor::coprocessorWrite(int coproc, int opc, uint32_t value, int rn,
 				return true;
 			}
 			else if (rm == 5 && type == 0) { // Invalidate entire instruction cache
+				Logger::warning("icache invalidated\n");
 				jit.invalidate();
 				thumb.invalidate();
 				return true;

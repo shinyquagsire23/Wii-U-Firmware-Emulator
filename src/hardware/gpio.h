@@ -33,8 +33,10 @@ private:
 	State state;
 	int cycles;
 	int offset;
-	uint16_t value;
-	bool pin;
+	uint16_t value_in;
+	uint16_t value_out;
+	bool pin_in;
+	bool pin_out;
 	
 	Buffer buffer;
 	uint16_t *data;
@@ -74,6 +76,12 @@ public:
 	
 private:
 	SEEPROMController seeprom;
+	uint8_t debug_val;
+	uint8_t last_debug_val;
+	uint8_t debug_serial;
+	uint8_t debug_bits;
+	uint8_t debug_byte;
+	std::string debug_str;
 };
 
 

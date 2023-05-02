@@ -8,6 +8,8 @@
 #include "common/sys.h"
 #include "common/buffer.h"
 
+#include "common/fileutils.h"
+
 #include <readline/readline.h>
 #include <algorithm>
 
@@ -55,6 +57,7 @@ const char *HELP_TEXT =
 	"    trace\n"
 	"\n"
 	"Memory state:\n"
+	"    memdump virt/phys <address> <length>  // ARM + PPC\n"
 	"    read virt/phys <address> <length>  // ARM + PPC\n"
 	"    read code/data <address> <length>  // DSP\n"
 	"    translate <address>\n"
@@ -226,6 +229,7 @@ void Debugger::processCommand(std::string command, ArgParser *args) {
 	else if (command == "print") print(args);
 	else if (command == "trace") trace(args);
 	
+	else if (command == "memdump") memdump(args);
 	else if (command == "read") read(args);
 	else if (command == "translate") translate(args);
 	else if (command == "memmap") memmap(args);
@@ -602,6 +606,42 @@ void Debugger::print(ArgParser *args) {
 void Debugger::trace(ArgParser *args) {
 	if (!args->finish()) return;
 	getInterface()->printStackTrace();
+}
+
+void Debugger::memdump(ArgParser *args) {
+	std::string mode;
+	uint32_t address, length;
+	if (!args->string(&mode)) return;
+	if (!args->integer(&address)) return;
+	if (!args->integer(&length)) return;
+	if (!args->finish()) return;
+	
+	if (mode != "phys" && mode != "virt" && mode != "code" && mode != "data") {
+		Sys::out->write("Please specify either 'phys', 'virt', 'code' or 'data'.\n");
+		return;
+	}
+	
+	Buffer data;
+	if (mode == "code" || mode == "data") {
+		data = dsp->read(address, length, mode == "code");
+	}
+	else {
+		DebugInterface *interface = getInterface();
+		if (mode == "virt") {
+			if (!interface->translate(&address)) {
+				Sys::out->write("Address translation failed.\n");
+				return;
+			}
+		}
+		
+		if (address + length < address) {
+			length = ~address + 1;
+		}
+		
+		data = physmem->read(address, length);
+	}
+
+	FileUtils::save("dump.bin", data);
 }
 
 void Debugger::read(ArgParser *args) {

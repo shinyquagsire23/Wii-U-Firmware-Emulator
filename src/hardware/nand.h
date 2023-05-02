@@ -52,6 +52,8 @@ private:
 	uint8_t *slccmpt;
 	
 	uint8_t *file;
+
+	int irq_hack;
 	
 	PhysicalMemory *physmem;
 };

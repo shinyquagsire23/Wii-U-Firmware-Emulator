@@ -69,6 +69,17 @@ private:
 	uint8_t *data;
 };
 
+class SDCard : public SDIOCard {
+public:
+	SDCard();
+	~SDCard();
+	
+	Buffer read(uint64_t offset, uint32_t size);
+	
+private:
+	uint8_t *data;
+};
+
 
 class DummyCard : public SDIOCard {
 public:
@@ -91,6 +102,7 @@ public:
 		SDIO_RESPONSE1 = 0x14,
 		SDIO_RESPONSE2 = 0x18,
 		SDIO_RESPONSE3 = 0x1C,
+		SDIO_READ_FIFO = 0x20,
 		SDIO_STATE = 0x24,
 		SDIO_CONTROL = 0x28,
 		SDIO_CLOCK_CONTROL = 0x2C,
@@ -109,8 +121,10 @@ public:
 		SELECT_CARD = 7,
 		SEND_IF_COND = 8,
 		SEND_CSD = 9,
+		STOP_TRANSMISSION = 12,
 		SEND_STATUS = 13,
 		SET_BLOCKLEN = 16,
+		READ_SINGLE_BLOCK = 17,
 		READ_MULTIPLE_BLOCK = 18,
 		IO_RW_DIRECT = 52,
 		APP_CMD = 55
@@ -176,6 +190,9 @@ private:
 	uint32_t int_enable;
 	uint32_t int_signal;
 	uint64_t capabilities;
+	uint32_t sdio_state;
+	Buffer read_data;
+	uint32_t read_fifo_idx;
 	
 	int bus_width;
 	int cd_disable;

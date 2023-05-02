@@ -29,10 +29,11 @@ void NANDBank::reset() {
 	pagenum = 0;
 	pageoff = 0;
 	
-	file = slccmpt;
+	file = slc;
 }
 
 void NANDBank::set_bank(bool cmpt) {
+	//Logger::warning("Bank: 0x%X", cmpt);
 	file = cmpt ? slccmpt : slc;
 }
 
@@ -49,7 +50,7 @@ uint32_t NANDBank::read(uint32_t addr) {
 
 void NANDBank::write(uint32_t addr, uint32_t value) {
 	if (addr == NAND_CTRL) {
-		ctrl = value & ~0x80000000;
+		ctrl = value & ~0xC0000000;
 		if (value & 0x80000000) {
 			process_ctrl(ctrl);
 		}
@@ -92,6 +93,7 @@ void NANDBank::process_ctrl(uint32_t value) {
 }
 
 void NANDBank::process_command(int command, int length) {
+	//Logger::warning("nand command: 0x%02X %x", command, length);
 	if (command == 0x00) {} // Read (1st cycle)
 	else if (command == 0x10) {} // Page program confirm
 	else if (command == 0x30) { // Read (2nd cycle)
@@ -206,7 +208,7 @@ void NANDController::write(uint32_t addr, uint32_t value) {
 		}
 	}
 	else if (addr == NAND_BANK_CTRL) {
-		bank_ctrl = value & ~0x80000000;
+		bank_ctrl = value & ~0xC0000000;
 		if (value & 0x80000000) {
 			int num = (value >> 16) & 0xFF;
 			for (int i = 0; i < num; i++) {

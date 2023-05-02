@@ -12,6 +12,7 @@ void AHMNController::reset() {
 
 uint32_t AHMNController::read(uint32_t addr) {
 	switch (addr) {
+	case 0xD0B0008: return 0;
 		case AHMN_MEM0_CONFIG: return mem0_config;
 		case AHMN_MEM1_CONFIG: return mem1_config;
 		case AHMN_MEM2_CONFIG: return mem2_config;
@@ -28,7 +29,8 @@ uint32_t AHMNController::read(uint32_t addr) {
 }
 
 void AHMNController::write(uint32_t addr, uint32_t value) {
-	if (addr == AHMN_REVISION) {}
+	if (addr == 0xD0B0008) {}
+	else if (addr == AHMN_REVISION) {}
 	else if (addr == AHMN_MEM0_CONFIG) mem0_config = value;
 	else if (addr == AHMN_MEM1_CONFIG) mem1_config = value;
 	else if (addr == AHMN_MEM2_CONFIG) mem2_config = value;

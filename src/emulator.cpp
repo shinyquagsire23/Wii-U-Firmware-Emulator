@@ -38,11 +38,11 @@ Emulator::Emulator(bool boot0) :
 void Emulator::reset() {
 
 	Buffer buffer = FileUtils::load(boot0 ? "files/boot0.bin" : "files/boot1.bin");
-	uint32_t load_address = boot0 ? 0xFFFF0000 : 0xD400200;
+	uint32_t load_address = boot0 ? 0xFFFF0000 : 0x0D400000;
 	physmem.write(load_address, buffer);
 
 	arm.reset();
-	arm.core.regs[ARMCore::PC] = load_address;
+	arm.core.regs[ARMCore::PC] = boot0 ? 0xFFFF0000 : 0x0D400200;
 	arm.enable();
 	
 	reservation.reset();
@@ -59,7 +59,7 @@ void Emulator::run() {
 	
 	::signal(SIGINT, signal_handler);
 	
-	debugger.show(0);
+	//debugger.show(0);
 	
 	while (running) {
 		keyboard_interrupt = false;

@@ -140,7 +140,7 @@ uint32_t I2CController::read(uint32_t addr) {
 				return readbuf.size() << 16;
 			}
 			return readbuf.at(readoffs++);
-		case I2C_WRITE_CTRL: return 0;
+		case I2C_WRITE_CTRL: return 0x2;
 		case I2C_INT_MASK: return int_mask;
 		case I2C_INT_STATE: return int_state;
 	}

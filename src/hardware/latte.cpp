@@ -106,8 +106,12 @@ void LatteController::reset() {
 }
 
 uint32_t LatteController::read(uint32_t addr) {
+	if (addr != LT_TIMER && !(LT_GPIO_START <= addr && addr < LT_GPIO_END) && addr != LT_ALARM && !(0xD000470 <= addr && addr <= 0xD000480) && !(0xD000100 <= addr && addr <= 0xD00014c))
+	{
+		Logger::warning("latte memory read: 0x%X", addr);
+	}
 	switch (addr) {
-		case LT_TIMER: return timer;
+		case LT_TIMER: {timer += 1; return timer;}
 		case LT_WDG_CFG: return wdgcfg;
 		case LT_DBG_INT_STATUS: return dbgintsts;
 		case LT_SRNPROT: return srnprot;
@@ -146,6 +150,17 @@ uint32_t LatteController::read(uint32_t addr) {
 		case LT_ABIF_CPLTL_DATA: return asic.read(asic_offs);
 		case LT_ABIF_CPLTL_CTRL: return asic_ctrl;
 		case LT_60XE_CFG: return cfg_60xe;
+		case 0xD000100: return 0;
+		case 0xD000104: return 0;
+		case 0xD000108: return 0;
+		case 0xD00010C: return 0;
+		case 0xD000110: return 0;
+		case 0xD000114: return 0;
+		case 0xD000118: return 0;
+		case 0xD00011c: return 0;
+		case 0xD000120: return 0;
+		case 0xD000124: return 0;
+		case 0xD000134: return 0;
 	}
 	
 	if (LT_IRQ_PPC_START <= addr && addr < LT_IRQ_PPC_END) {
@@ -167,6 +182,11 @@ uint32_t LatteController::read(uint32_t addr) {
 }
 
 void LatteController::write(uint32_t addr, uint32_t value) {
+	if (addr != LT_TIMER && !(LT_GPIO_START <= addr && addr < LT_GPIO_END) && addr != LT_ALARM && !(0xD000470 <= addr && addr <= 0xD000480) && !(0xD000100 <= addr && addr <= 0xD00014c))
+	{
+		Logger::warning("latte memory write: 0x%X 0x%08X", addr, value);
+	}
+	
 	if (addr == LT_TIMER) timer = value;
 	else if (addr == LT_ALARM) alarm = value;
 	else if (addr == LT_WDG_CFG) wdgcfg = value;
@@ -263,6 +283,9 @@ void LatteController::write(uint32_t addr, uint32_t value) {
 		addr -= LT_IPC_START;
 		ipc[addr / 0x10].write(addr % 0x10, value);
 	}
+	else if (addr >= 0xD000100 && addr <= 0xD000134) {
+
+	}
 	
 	else {
 		Logger::warning("Unknown latte memory write: 0x%X (0x%08X)", addr, value);
@@ -291,10 +314,15 @@ void LatteController::reset_ppc() {
 }
 
 void LatteController::update() {
-	timer++;
-	if (timer == alarm) {
-		irq_arm.intsr_all |= 1 << 0;
+
+	for (int i = 0; i < 1000; i++)
+	{
+		timer++;
+		if (timer == alarm) {
+			irq_arm.intsr_all |= 1 << 0;
+		}
 	}
+	
 	
 	gpio.update();
 	gpio2.update();

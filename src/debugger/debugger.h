@@ -82,6 +82,7 @@ private:
 	void print(ArgParser *parser);
 	void trace(ArgParser *parser);
 	
+	void memdump(ArgParser *parser);
 	void read(ArgParser *parser);
 	void translate(ArgParser *parser);
 	void memmap(ArgParser *parser);

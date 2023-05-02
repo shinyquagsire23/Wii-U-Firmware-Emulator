@@ -14,47 +14,58 @@ void SEEPROMController::reset() {
 	
 	cycles = 11;
 	offset = 0;
-	value = 0;
-	pin = false;
+	value_in = 0;
+	value_out = 0;
+	//pin_in = false;
+	//pin_out = false;
 }
 
 void SEEPROMController::prepare() {
 	state = LISTEN;
 	cycles = 11;
-	value = 0;
+	value_in = 0;
+	value_out = 0;
 }
 
 void SEEPROMController::write(bool state) {
-	pin = state;
+	pin_in = state;
 }
 
 bool SEEPROMController::read() {
-	return pin;
+	return pin_out;
 }
 
 void SEEPROMController::update() {
+	//Logger::warning("Seeprom cmd %08x %08x %04x %04x %x %x", state, cycles, value_in, value_out, pin_in, pin_out);
+
+	value_in = (value_in << 1) | pin_in;
+	//value_out = (value_out << 1) | pin_out;
+	pin_out = !!(value_out & 0x8000);
+	value_out <<= 1;
+
 	if (state == LISTEN) {
-		value = (value << 1) | pin;
+		//value_in = (value_in << 1) | pin_in;
 		if (--cycles == 0) {
 			handle_command();
 		}
 	}
 	else if (state == WRITE) {
-		value = (value << 1) | pin;
+		//value_in = (value_in << 1) | pin_in;
 		if (--cycles == 0) {
 			handle_write();
 		}
 	}
 	else if (state == WRITE_DELAY) {
 		if (--cycles == 0) {
-			value = 1;
+			value_in = 1;
 			cycles = 1;
 			state = READ;
 		}
 	}
 	else if (state == READ) {
-		pin = (value >> --cycles) & 1;
-		if (cycles == 0) {
+		//pin_out = value_out & 1;
+		//value_out >>= 1;
+		if (--cycles == 0) {
 			cycles = 2;
 			state = DELAY;
 		}
@@ -67,8 +78,10 @@ void SEEPROMController::update() {
 }
 
 void SEEPROMController::handle_command() {
-	int command = value >> 8;
-	int param = value & 0xFF;
+	int command = value_in >> 8;
+	int param = value_in & 0xFF;
+
+	Logger::warning("Seeprom cmd %08x, %08x", command, param);
 	
 	if (command == 4) {
 		cycles = 2;
@@ -76,22 +89,27 @@ void SEEPROMController::handle_command() {
 	}
 	else if (command == 5) {
 		cycles = 16;
-		value = 0;
+		value_in = 0;
 		offset = param;
 		state = WRITE;
 	}
 	else if (command == 6) {
 		cycles = 16;
-		value = Endian::swap16(data[param]);
+		value_out = Endian::swap16(data[param]);
 		state = READ;
 	}
 	else {
-		Logger::warning("Unknown seeprom command: 0x%X", value);
+		Logger::warning("Unknown seeprom command: 0x%X", value_in);
+
+		cycles = 16;
+		value_out = 0xFFFF;
+		state = READ;
 	}
+	value_in = 0;
 }
 
 void SEEPROMController::handle_write() {
-	data[offset] = Endian::swap16(value);
+	data[offset] = Endian::swap16(value_in);
 	state = WRITE_DELAY;
 	cycles = 2;
 }
@@ -106,22 +124,75 @@ uint32_t GPIOCommon::read() {
 }
 
 void GPIOCommon::write(int pin, bool state) {
-	if (pin == PIN_EEPROM_CS) {}
+	//if (pin <= PIN_EEPROM_DI)
+	//	Logger::warning("common gpio pin write: %i (%b)", pin, state);
+	if (pin == PIN_EEPROM_CS) {
+		if (!state) {
+			seeprom.reset();
+		}
+		else {
+			seeprom.reset();
+		}
+	}
 	else if (pin == PIN_EEPROM_SK) {
 		if (state) seeprom.update();
 	}
 	else if (pin == PIN_EEPROM_DO) seeprom.write(state);
-	else if (pin == PIN_DEBUG0) Logger::info("Debug 0: %b", state);
-	else if (pin == PIN_DEBUG1) Logger::info("Debug 1: %b", state);
-	else if (pin == PIN_DEBUG2) Logger::info("Debug 2: %b", state);
-	else if (pin == PIN_DEBUG3) Logger::info("Debug 3: %b", state);
-	else if (pin == PIN_DEBUG4) Logger::info("Debug 4: %b", state);
-	else if (pin == PIN_DEBUG5) Logger::info("Debug 5: %b", state);
-	else if (pin == PIN_DEBUG6) Logger::info("Debug 6: %b", state);
-	else if (pin == PIN_DEBUG7) Logger::info("Debug 7: %b", state);
+	else if (pin == PIN_DEBUG0) { this->last_debug_val = this->debug_val; /*Logger::info("Debug 0: %b", state);*/ this->debug_val &= ~(1<<0); this->debug_val |= (state ? 1<<0 : 0); /*Logger::info("Debug is: %x", this->debug_val);*/ }
+	else if (pin == PIN_DEBUG1) { this->last_debug_val = this->debug_val; /*Logger::info("Debug 1: %b", state);*/ this->debug_val &= ~(1<<1); this->debug_val |= (state ? 1<<1 : 0); /*Logger::info("Debug is: %x", this->debug_val);*/ }
+	else if (pin == PIN_DEBUG2) { this->last_debug_val = this->debug_val; /*Logger::info("Debug 2: %b", state);*/ this->debug_val &= ~(1<<2); this->debug_val |= (state ? 1<<2 : 0); /*Logger::info("Debug is: %x", this->debug_val);*/ }
+	else if (pin == PIN_DEBUG3) { this->last_debug_val = this->debug_val; /*Logger::info("Debug 3: %b", state);*/ this->debug_val &= ~(1<<3); this->debug_val |= (state ? 1<<3 : 0); /*Logger::info("Debug is: %x", this->debug_val);*/ }
+	else if (pin == PIN_DEBUG4) { this->last_debug_val = this->debug_val; /*Logger::info("Debug 4: %b", state);*/ this->debug_val &= ~(1<<4); this->debug_val |= (state ? 1<<4 : 0); /*Logger::info("Debug is: %x", this->debug_val);*/ }
+	else if (pin == PIN_DEBUG5) { this->last_debug_val = this->debug_val; /*Logger::info("Debug 5: %b", state);*/ this->debug_val &= ~(1<<5); this->debug_val |= (state ? 1<<5 : 0); /*Logger::info("Debug is: %x", this->debug_val);*/ }
+	else if (pin == PIN_DEBUG6) { this->last_debug_val = this->debug_val; /*Logger::info("Debug 6: %b", state);*/ this->debug_val &= ~(1<<6); this->debug_val |= (state ? 1<<6 : 0); /*Logger::info("Debug is: %x", this->debug_val);*/ }
+	else if (pin == PIN_DEBUG7) { this->last_debug_val = this->debug_val; /*Logger::info("Debug 7: %b", state);*/ this->debug_val &= ~(1<<7); this->debug_val |= (state ? 1<<7 : 0); /*Logger::info("Debug is: %x", this->debug_val);*/ }
 	else if (pin == PIN_TOUCAN) {}
 	else {
 		Logger::warning("Unknown common gpio pin write: %i (%b)", pin, state);
+	}
+
+	if (!this->debug_serial && this->last_debug_val == 0x0F && this->debug_val == 0x8F) {
+		this->debug_serial = 1;
+		this->debug_bits = 0;
+		this->debug_byte = 0;
+
+		Logger::warning("DEBUG SERIAL");
+	}
+	else if (debug_serial) {
+		if (this->last_debug_val != this->debug_val) {
+			//Logger::warning("DEBUG TRANS: %08x->%08x %08x", this->last_debug_val, this->debug_val);
+			//this->last_debug_val = this->debug_val;
+		}
+
+		if (this->debug_bits <= 7 && 
+			(this->last_debug_val & 0x80) == 0 && 
+			(this->debug_val & 0x80) == 0x80 && 
+			(this->debug_val & 0x7E) == 0) {
+			this->debug_byte = (this->debug_byte << 1) | (this->debug_val & 1);
+			this->debug_bits += 1;
+		}
+		else if (this->debug_val == 0x8F && this->debug_bits >= 8) {
+			//Logger::warning("DEBUG BYTE: %08x", this->debug_byte);
+
+			if (this->debug_byte == '\t' || this->debug_byte == '\n' || this->debug_byte == '\r' || (this->debug_byte >= ' ' && this->debug_byte <= '~')) {
+				if (this->debug_byte == '\n') {
+					Logger::warning("DEBUG: %s", this->debug_str.c_str());
+					this->debug_str = "";
+				}
+				else {
+					this->debug_str += (char)this->debug_byte;
+				}
+			}
+			
+
+			this->debug_bits = 0;
+			this->debug_byte = 0;
+		}
+	}
+
+	if (!this->debug_serial && this->last_debug_val != this->debug_val) {
+		Logger::warning("DEBUG BYTE: %08x", this->debug_val);
+		this->last_debug_val = this->debug_val;
 	}
 }
 
@@ -180,6 +251,7 @@ uint32_t GPIOController::read(uint32_t addr) {
 }
 
 void GPIOController::write(uint32_t addr, uint32_t value) {
+	//Logger::warning("gpio memory write: 0x%08X %08x", addr, value);
 	if (addr == LT_GPIOE_OUT) {
 		uint32_t mask = gpio_dir & gpio_enable & gpio_owner;
 		for (int i = 0; i < 32; i++) {
@@ -200,7 +272,8 @@ void GPIOController::write(uint32_t addr, uint32_t value) {
 	else if (addr == LT_GPIO_OUT) {
 		uint32_t mask = gpio_dir & gpio_enable & ~gpio_owner;
 		for (int i = 0; i < 32; i++) {
-			if (mask & (1 << i)) {
+			if (mask & (1 << i)) 
+			{
 				if ((value & (1 << i)) != (gpio_out & (1 << i))) {
 					group->write(i, (value >> i) & 1);
 				}
